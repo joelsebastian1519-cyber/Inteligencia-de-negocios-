@@ -10,6 +10,9 @@ function seed() {
   }
   return r;
 }
-const load = () => { if (!fs.existsSync(F)) fs.writeFileSync(F, JSON.stringify(seed(), null, 1)); return JSON.parse(fs.readFileSync(F)); };
-const add = (v) => { const d = load(); d.push(v); fs.writeFileSync(F, JSON.stringify(d, null, 1)); };
-module.exports = { load, add };
+const save = (d) => fs.writeFileSync(F, JSON.stringify(d, null, 1));
+const load = () => { if (!fs.existsSync(F)) save(seed()); return JSON.parse(fs.readFileSync(F)); };
+const add = (v) => { const d = load(); d.push(v); save(d); };
+const addMany = (arr) => { const d = load(); save(d.concat(arr)); };
+const remove = (i) => { const d = load(); if (i < 0 || i >= d.length) return false; d.splice(i, 1); save(d); return true; };
+module.exports = { load, add, addMany, remove };
