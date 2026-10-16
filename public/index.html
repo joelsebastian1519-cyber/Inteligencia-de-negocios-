@@ -10,10 +10,19 @@ h1{margin:0 0 4px}.sub{color:var(--mut);margin-bottom:16px}
 .grid{display:grid;gap:14px}.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.two{grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-top:14px}
 .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 1px 4px #0002}
 .kpi b{display:block;font-size:1.5rem;color:var(--pri)}.kpi span{color:var(--mut);font-size:.85rem}
-select{padding:6px;border-radius:6px;margin-bottom:10px}li{margin:6px 0}
+input,select{padding:8px;border-radius:6px;border:1px solid #8886;background:var(--card);color:var(--tx);font:inherit}.btn{padding:8px 14px;border:0;border-radius:6px;background:var(--pri);color:#fff;cursor:pointer;font:inherit}.btn.sec{background:#6b7280}.del{background:none;border:0;cursor:pointer;color:#ef4444}select{padding:6px;border-radius:6px;margin-bottom:10px}li{margin:6px 0}
 table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:6px;border-bottom:1px solid #8883;text-align:left}
 </style></head><body>
-<h1>📊 Dashboard Inteligente</h1><div class="sub">Se actualiza solo cada 5 s · registra ventas con <code>npm run registrar</code></div>
+<h1>📊 Dashboard Inteligente</h1><div class="sub">Se actualiza solo cada 5 s · registra desde aquí o con <code>npm run registrar</code></div>
+<div class="card" style="margin-bottom:14px"><h3>➕ Registrar ventas</h3>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+ <input id="fe" type="date"><input id="pr" list="lp" placeholder="Producto"><input id="ca" list="lc" placeholder="Categoría">
+ <input id="cn" type="number" min="1" placeholder="Cantidad"><input id="pu" type="number" min="1" placeholder="Precio unitario">
+ <button id="bg" class="btn">Registrar venta</button></div>
+<datalist id="lp"></datalist><datalist id="lc"></datalist>
+<p style="margin:12px 0 6px"><b>O cargar varias desde un archivo CSV</b> (columnas: fecha,producto,categoria,cantidad,precio)</p>
+<input type="file" id="csv" accept=".csv"> <button id="pl" class="btn sec">Descargar plantilla</button> <button id="ex" class="btn sec">Exportar ventas</button>
+<div id="msg" class="sub" style="margin:8px 0 0"></div></div>
 <div class="grid kpis" id="kpis"></div>
 <div class="grid two">
   <div class="card"><h3>Ingresos mensuales + pronóstico (IA)</h3><canvas id="c1"></canvas></div>
@@ -28,8 +37,18 @@ table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:6px;bor
 const $=id=>document.getElementById(id),fmt=x=>'$'+Math.round(x).toLocaleString('es-CO');
 const ch={};let ventas=[];
 function draw(id,cfg){if(ch[id]){ch[id].data=cfg.data;ch[id].update();}else ch[id]=new Chart($(id),cfg);}
-function tabla(){const c=$('f').value;const r=ventas.filter(v=>!c||v.categoria===c).slice(-15).reverse();
- $('tbl').innerHTML='<tr><th>Fecha</th><th>Producto</th><th>Categoría</th><th>Cant.</th><th>Total</th></tr>'+r.map(v=>`<tr><td>${v.fecha}</td><td>${v.producto}</td><td>${v.categoria}</td><td>${v.cantidad}</td><td>${fmt(v.cantidad*v.precio)}</td></tr>`).join('');}
+function tabla(){const c=$('f').value;const r=ventas.map((v,i)=>({...v,i})).filter(v=>!c||v.categoria===c).slice(-15).reverse();
+ $('tbl').innerHTML='<tr><th>Fecha</th><th>Producto</th><th>Categoría</th><th>Cant.</th><th>Total</th><th></th></tr>'+r.map(v=>`<tr><td>${v.fecha}</td><td>${v.producto}</td><td>${v.categoria}</td><td>${v.cantidad}</td><td>${fmt(v.cantidad*v.precio)}</td><td><button class="del" title="Eliminar" onclick="borrar(${v.i})">🗑</button></td></tr>`).join('');}
+const say=(t,ok=true)=>{$('msg').textContent=t;$('msg').style.color=ok?'#10b981':'#ef4444';};
+async function enviar(body){const r=await fetch('/api/ventas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Error');return j;}
+async function borrar(i){if(!confirm('¿Eliminar esta venta?'))return;await fetch('/api/ventas/'+i,{method:'DELETE'});load();}
+$('fe').value=new Date().toISOString().slice(0,10);
+$('bg').onclick=async()=>{try{await enviar({fecha:$('fe').value,producto:$('pr').value,categoria:$('ca').value,cantidad:$('cn').value,precio:$('pu').value});say('✅ Venta registrada');['pr','ca','cn','pu'].forEach(i=>$(i).value='');load();}catch(e){say('❌ Revisa que todos los campos estén completos y sean válidos',false);}};
+function parseCSV(t){const L=t.replace(/\r/g,'').split('\n').filter(x=>x.trim());const sep=L[0].includes(';')?';':',';const H=L[0].split(sep).map(h=>h.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));return L.slice(1).map(l=>{const c=l.split(sep);const o={};H.forEach((h,i)=>o[h]=(c[i]||'').trim());return o;});}
+$('csv').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=await enviar(parseCSV(await f.text()));say(`✅ ${j.guardadas} ventas cargadas`+(j.rechazadas?` · ${j.rechazadas} filas rechazadas por datos inválidos`:''));load();}catch(err){say('❌ El archivo no tiene datos válidos',false);}e.target.value='';};
+const bajar=(n,t)=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download=n;a.click();};
+$('pl').onclick=()=>bajar('plantilla_ventas.csv','fecha,producto,categoria,cantidad,precio\n2026-10-01,Laptop,Tecnología,2,2400000\n2026-10-02,Mouse,Tecnología,10,60000\n');
+$('ex').onclick=()=>bajar('ventas.csv','fecha,producto,categoria,cantidad,precio\n'+ventas.map(v=>[v.fecha,v.producto,v.categoria,v.cantidad,v.precio].join(',')).join('\n'));
 async function load(){
  const [a,v]=await Promise.all([fetch('/api/analisis').then(r=>r.json()),fetch('/api/ventas').then(r=>r.json())]);ventas=v;
  const k=a.kpi;$('kpis').innerHTML=[['Ingresos',fmt(k.ingresos)],['Transacciones',k.transacciones],['Ticket promedio',fmt(k.ticket)],['Unidades',k.unidades]].map(([l,x])=>`<div class="card kpi"><b>${x}</b><span>${l}</span></div>`).join('');
@@ -41,6 +60,7 @@ async function load(){
  $('anom').innerHTML=a.anomalias.map(x=>`<tr><td>${x.fecha}</td><td>${x.producto}</td><td>${fmt(x.cantidad*x.precio)}</td></tr>`).join('')||'<tr><td>Ninguna</td></tr>';
  const cats=[...new Set(v.map(x=>x.categoria))],sel=$('f'),cur=sel.value;
  sel.innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option ${c===cur?'selected':''}>${c}</option>`).join('');
+ $('lc').innerHTML=cats.map(c=>`<option value="${c}">`).join('');$('lp').innerHTML=[...new Set(v.map(x=>x.producto))].map(c=>`<option value="${c}">`).join('');
  tabla();}
 $('f').onchange=tabla;load();setInterval(load,5000);
 </script></body></html>
