@@ -5,6 +5,21 @@ app.use(express.static('public'));
 
 const total = (v) => v.cantidad * v.precio;
 const sum = (a) => a.reduce((x, y) => x + y, 0);
+// Unifica mayúsculas, minúsculas y tildes (tecnologia = Tecnología)
+const norm = (s) => s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function cargar() {
+  const vistos = {};
+  return db.load().map((x) => {
+    const r = { ...x };
+    for (const campo of ['categoria', 'producto']) {
+      const t = String(r[campo]).trim();
+      const k = campo + norm(t);
+      vistos[k] = vistos[k] || t.charAt(0).toUpperCase() + t.slice(1);
+      r[campo] = vistos[k];
+    }
+    return r;
+  });
+}
 const group = (arr, key) => arr.reduce((o, v) => ((o[key(v)] = (o[key(v)] || 0) + total(v)), o), {});
 
 // Regresión lineal simple: y = a + b·x
@@ -15,7 +30,7 @@ function regresion(ys) {
   return { a: my - b * mx, b };
 }
 
-app.get('/api/ventas', (req, res) => res.json(db.load()));
+app.get('/api/ventas', (req, res) => res.json(cargar()));
 app.post('/api/ventas', (req, res) => {
   const { fecha, producto, categoria, cantidad, precio } = req.body;
   if (!producto || !categoria || !(cantidad > 0) || !(precio > 0)) return res.status(400).json({ error: 'Datos inválidos' });
@@ -24,7 +39,7 @@ app.post('/api/ventas', (req, res) => {
 });
 
 app.get('/api/analisis', (req, res) => {
-  const v = db.load();
+  const v = cargar();
   const mensual = group(v, (x) => x.fecha.slice(0, 7));
   const meses = Object.keys(mensual).sort();
   const vals = meses.map((m) => mensual[m]);
