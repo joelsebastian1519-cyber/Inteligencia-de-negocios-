@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Inteligente</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--tx:#1d2433;--mut:#6b7280;--pri:#4f46e5}
+@media(prefers-color-scheme:dark){:root{--bg:#10131c;--card:#1a1f2d;--tx:#e8ebf3;--mut:#9aa3b5}}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--tx);padding:20px}
+h1{margin:0 0 4px}.sub{color:var(--mut);margin-bottom:16px}
+.grid{display:grid;gap:14px}.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.two{grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-top:14px}
+.card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 1px 4px #0002}
+.kpi b{display:block;font-size:1.5rem;color:var(--pri)}.kpi span{color:var(--mut);font-size:.85rem}
+select{padding:6px;border-radius:6px;margin-bottom:10px}li{margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:6px;border-bottom:1px solid #8883;text-align:left}
+</style></head><body>
+<h1>📊 Dashboard Inteligente</h1><div class="sub">Se actualiza solo cada 5 s · registra ventas con <code>npm run registrar</code></div>
+<div class="grid kpis" id="kpis"></div>
+<div class="grid two">
+  <div class="card"><h3>Ingresos mensuales + pronóstico (IA)</h3><canvas id="c1"></canvas></div>
+  <div class="card"><h3>Ingresos por producto</h3><canvas id="c2"></canvas></div>
+  <div class="card"><h3>Participación por categoría</h3><canvas id="c3"></canvas></div>
+  <div class="card"><h3>🤖 Insights automáticos</h3><ul id="ins"></ul><h4>Ventas atípicas</h4><table id="anom"></table></div>
+</div>
+<div class="card" style="margin-top:14px"><h3>Ventas registradas</h3>
+<select id="f"><option value="">Todas las categorías</option></select>
+<div style="overflow-x:auto"><table id="tbl"></table></div></div>
+<script>
+const $=id=>document.getElementById(id),fmt=x=>'$'+Math.round(x).toLocaleString('es-CO');
+const ch={};let ventas=[];
+function draw(id,cfg){if(ch[id]){ch[id].data=cfg.data;ch[id].update();}else ch[id]=new Chart($(id),cfg);}
+function tabla(){const c=$('f').value;const r=ventas.filter(v=>!c||v.categoria===c).slice(-15).reverse();
+ $('tbl').innerHTML='<tr><th>Fecha</th><th>Producto</th><th>Categoría</th><th>Cant.</th><th>Total</th></tr>'+r.map(v=>`<tr><td>${v.fecha}</td><td>${v.producto}</td><td>${v.categoria}</td><td>${v.cantidad}</td><td>${fmt(v.cantidad*v.precio)}</td></tr>`).join('');}
+async function load(){
+ const [a,v]=await Promise.all([fetch('/api/analisis').then(r=>r.json()),fetch('/api/ventas').then(r=>r.json())]);ventas=v;
+ const k=a.kpi;$('kpis').innerHTML=[['Ingresos',fmt(k.ingresos)],['Transacciones',k.transacciones],['Ticket promedio',fmt(k.ticket)],['Unidades',k.unidades]].map(([l,x])=>`<div class="card kpi"><b>${x}</b><span>${l}</span></div>`).join('');
+ const lab=[...a.meses,...a.pronostico.map(p=>p.mes)];
+ draw('c1',{type:'line',data:{labels:lab,datasets:[{label:'Real',data:a.vals,borderColor:'#4f46e5',tension:.3},{label:'Pronóstico',data:[...Array(a.vals.length-1).fill(null),a.vals.at(-1),...a.pronostico.map(p=>p.valor)],borderColor:'#f59e0b',borderDash:[6,4],tension:.3}]}});
+ draw('c2',{type:'bar',data:{labels:Object.keys(a.porProducto),datasets:[{label:'Ingresos',data:Object.values(a.porProducto),backgroundColor:'#4f46e5'}]}});
+ draw('c3',{type:'doughnut',data:{labels:Object.keys(a.porCategoria),datasets:[{data:Object.values(a.porCategoria),backgroundColor:['#4f46e5','#10b981','#f59e0b','#ef4444','#06b6d4']}]}});
+ $('ins').innerHTML=a.insights.map(i=>`<li>${i}</li>`).join('');
+ $('anom').innerHTML=a.anomalias.map(x=>`<tr><td>${x.fecha}</td><td>${x.producto}</td><td>${fmt(x.cantidad*x.precio)}</td></tr>`).join('')||'<tr><td>Ninguna</td></tr>';
+ const cats=[...new Set(v.map(x=>x.categoria))],sel=$('f'),cur=sel.value;
+ sel.innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option ${c===cur?'selected':''}>${c}</option>`).join('');
+ tabla();}
+$('f').onchange=tabla;load();setInterval(load,5000);
+</script></body></html>
